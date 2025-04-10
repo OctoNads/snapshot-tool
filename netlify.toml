@@ -1,0 +1,8 @@
+[build]
+  publish = "build"       # Correct folder for frontend’s static files
+  functions = "functions" # Folder with serverless functions
+
+[[redirects]]
+  from = "/api/*"         # Route API requests to functions
+  to = "/.netlify/functions/:splat"
+  status = 200
