@@ -14,6 +14,7 @@ const App = () => {
   const [accessError, setAccessError] = useState(false);
   const [floatingTextStyles, setFloatingTextStyles] = useState([]);
   const [showCompletion, setShowCompletion] = useState(false);
+  const [showInfoPopup, setShowInfoPopup] = useState(false); // New state for info popup
   const [fileFormat, setFileFormat] = useState("pdf");
   const [fetchError, setFetchError] = useState("");
 
@@ -137,10 +138,16 @@ const App = () => {
     }
 
     setIsLoading(true);
+    setShowInfoPopup(true); // Show the 5-second popup
     setFetchError("");
     setHolderCount("");
     setResult([]);
     setCollectionMetadata(null);
+
+    // Hide the info popup after 5 seconds
+    setTimeout(() => {
+      setShowInfoPopup(false);
+    }, 5000);
 
     try {
       const { holders, metadata } = await fetchAllNFTHolders(contractAddress);
@@ -154,12 +161,12 @@ const App = () => {
             body: "NFT holders have been successfully fetched!",
           });
         }
-        setShowCompletion(true);
+        setShowCompletion(true); // Show completion popup
       } else {
         setHolderCount("Number of holders: 0");
         setResult([]);
         setCollectionMetadata(null);
-        setShowCompletion(true);
+        setShowCompletion(true); // Show completion popup
       }
     } catch (error) {
       setFetchError(error.message);
@@ -312,7 +319,9 @@ const App = () => {
 
           {holderCount && <div id="holderCount">{holderCount}</div>}
           <div id="result">
-            {result.length > 0 ? (
+            {isLoading ? (
+              <div className="spinner"></div> // Show rotating spinner during loading
+            ) : result.length > 0 ? (
               Array.isArray(result) && result[0].ownerAddress ? (
                 <ul>
                   {result.map((holder, index) => (
@@ -395,6 +404,18 @@ const App = () => {
           )}
         </div>
       </div>
+
+      {/* Info Popup Modal (Shown for 5 seconds when fetching starts) */}
+      {showInfoPopup && (
+        <div className="modal" id="infoModal">
+          <div className="modal-content">
+            <h2>Fetching in Progress</h2>
+            <p>The Result will Display in some mins. Please sit back Relax we will notify you.</p>
+            <p>In case of Any Failure Try again.</p>
+            <button onClick={() => setShowInfoPopup(false)}>Close</button>
+          </div>
+        </div>
+      )}
 
       {/* Completion Modal */}
       {showCompletion && (
