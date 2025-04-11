@@ -18,20 +18,14 @@ const App = () => {
   const [fileFormat, setFileFormat] = useState("pdf");
   const [fetchError, setFetchError] = useState("");
 
-  // Request notification permission on component mount
+  // Request notification permission on mount
   useEffect(() => {
-    if (
-      "Notification" in window &&
-      Notification.permission !== "granted" &&
-      Notification.permission !== "denied"
-    ) {
-      Notification.requestPermission().catch((err) =>
-        console.error("Notification permission error:", err)
-      );
+    if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+      Notification.requestPermission().catch((err) => console.error("Notification permission error:", err));
     }
   }, []);
 
-  // Set up floating text animation
+  // Floating text animation setup
   useEffect(() => {
     const floatingTexts = [
       "GMONAD",
@@ -66,7 +60,7 @@ const App = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Handle access code submission
+  // Handle access submission
   const handleAccessSubmit = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const input = accessInput.trim().toUpperCase();
@@ -78,28 +72,9 @@ const App = () => {
     }
   };
 
-  // Retry fetch function with exponential backoff
-  const retryFetch = async (fn, initialDelay = 1000) => {
-    let delay = initialDelay;
-    const retry = async () => {
-      try {
-        return await fn();
-      } catch (error) {
-        console.log(`Retrying in ${delay}ms... Error: ${error.message}`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay *= 2;
-        if (delay > 16000) delay = 16000; // Cap delay at 16 seconds
-        return retry(); // Recursively retry
-      }
-    };
-    return retry();
-  };
-
-  // Fetch NFT holders for a single page
+  // Fetch NFT holders from backend (single page)
   const fetchNFTHolders = async (contractAddress, pageIndex = 1, pageSize = 10) => {
-    const url = `/api/holders?contractAddress=${encodeURIComponent(
-      contractAddress
-    )}&pageIndex=${pageIndex}&pageSize=${pageSize}`;
+    const url = `/api/holders?contractAddress=${encodeURIComponent(contractAddress)}&pageIndex=${pageIndex}&pageSize=${pageSize}`;
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
@@ -107,55 +82,34 @@ const App = () => {
     return response.json();
   };
 
-  // Fetch all NFT holders with pagination and retries
+  // Fetch all NFT holders with pagination
   const fetchAllNFTHolders = async (contractAddress, pageSize = 10) => {
     let allHolders = [];
     let metadata = null;
     let pageIndex = 1;
-    const batchSize = 5; // Fetch 10 pages at a time
-    let total = 0; // Total number of holders, set dynamically from API
+    const batchSize = 10;
 
-    while (true) {
-      const fetchPromises = [];
-      // Create promises for the current batch
-      for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
-        const currentPage = pageIndex + i;
-        fetchPromises.push(
-          retryFetch(() => fetchNFTHolders(contractAddress, currentPage, pageSize))
-        );
-      }
-
-      // Wait for all promises in the batch to resolve
-      const batchResults = await Promise.all(fetchPromises);
-
-      // Process each result in the batch
-      for (const result of batchResults) {
-        if (!metadata && result.metadata) metadata = result.metadata;
-        if (total === 0 && result.total) total = result.total; // Set total from first response
-        allHolders.push(...result.holders);
-        if (allHolders.length < total) {
-          // Continue fetching if more holders are expected
-        } else {
-          break; // Stop if all holders are fetched
+    try {
+      while (true) {
+        const fetchPromises = [];
+        for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
+          fetchPromises.push(fetchNFTHolders(contractAddress, pageIndex + i, pageSize));
         }
+        const batchResults = await Promise.all(fetchPromises);
+        let hasMorePages = false;
+        for (const result of batchResults) {
+          if (!metadata) metadata = result.metadata;
+          allHolders.push(...result.holders);
+          if (result.total && allHolders.length < result.total) hasMorePages = true;
+          else if (result.holders.length === pageSize) hasMorePages = true;
+        }
+        pageIndex += batchSize;
+        if (!hasMorePages || fetchPromises.length < batchSize) break;
       }
-
-      pageIndex += batchSize;
-      console.log(`Fetched ${allHolders.length} holders so far`);
-
-      // Stop if we've fetched all holders or no more pages are available
-      if (allHolders.length >= total || fetchPromises.length < batchSize) break;
-
-      // Add delay between batches to avoid overwhelming the server
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // 1-second delay
+      return { holders: allHolders, metadata };
+    } catch (error) {
+      throw new Error(`Failed to fetch holders: ${error.message}`);
     }
-
-    // Log warning if fewer holders were fetched than expected
-    if (allHolders.length < total) {
-      console.warn(`Only fetched ${allHolders.length} holders, expected ${total}`);
-    }
-
-    return { holders: allHolders, metadata };
   };
 
   // Filter holders by minimum NFT count
@@ -190,18 +144,15 @@ const App = () => {
     setResult([]);
     setCollectionMetadata(null);
 
-    // Hide info popup after 5 seconds
-    setTimeout(() => setShowInfoPopup(false), 5000);
+    setTimeout(() => {
+      setShowInfoPopup(false);
+    }, 5000);
 
     try {
       const { holders, metadata } = await fetchAllNFTHolders(contractAddress);
       if (holders.length > 0) {
         const filteredHolders = filterHolders(holders, minNFTsValue);
-        setHolderCount(
-          `Number of Holders holding at least ${minNFTs || 1} NFT(s): ${
-            filteredHolders.length
-          }`
-        );
+        setHolderCount(`Number of Holders holding at least ${minNFTs || 1} NFT(s): ${filteredHolders.length}`);
         setResult(filteredHolders);
         setCollectionMetadata(metadata);
         if ("Notification" in window && Notification.permission === "granted") {
@@ -217,13 +168,13 @@ const App = () => {
         setShowCompletion(true);
       }
     } catch (error) {
-      setFetchError(`Failed to fetch holders: ${error.message}`);
+      setFetchError(error.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Reset form fields
+  // Reset form
   const handleReset = () => {
     setContractAddress("");
     setMinNFTs("");
@@ -233,30 +184,30 @@ const App = () => {
     setFetchError("");
   };
 
-  // Handle download of holder addresses
   const handleDownload = () => {
     const addresses = result.map((holder) => holder.ownerAddress).filter((addr) => addr);
     if (addresses.length === 0) {
       alert("No holders to download.");
       return;
     }
-
+  
     if (fileFormat === "pdf") {
       const doc = new jsPDF();
-      const lineHeight = 10;
-      const pageHeight = doc.internal.pageSize.height;
-      const margin = 10;
-      let y = margin;
-
-      addresses.forEach((addr) => {
+      const lineHeight = 10; // Height per line
+      const pageHeight = doc.internal.pageSize.height; // Typically 297mm or ~842 points for A4
+      const margin = 10; // Top and bottom margin
+      let y = margin; // Starting y-position
+  
+      addresses.forEach((addr, index) => {
+        // Check if the current line exceeds the page height
         if (y + lineHeight > pageHeight - margin) {
-          doc.addPage();
-          y = margin;
+          doc.addPage(); // Add a new page
+          y = margin; // Reset y-position to the top of the new page
         }
-        doc.text(addr, margin, y);
-        y += lineHeight;
+        doc.text(addr, margin, y); // Add the address at the current position
+        y += lineHeight; // Move to the next line
       });
-
+  
       doc.save("holders.pdf");
     } else if (fileFormat === "xml") {
       const xmlContent = `<holders>\n${addresses
@@ -288,7 +239,11 @@ const App = () => {
           <div className="header-spacer"></div>
         </header>
         <div className="container">
-          {fetchError && <div className="error-message">{fetchError}</div>}
+          {fetchError && (
+            <div className="error-message">
+              {fetchError}
+            </div>
+          )}
           <form onSubmit={handleFormSubmit}>
             <label htmlFor="contractAddress">NFT Contract Address:</label>
             <input
@@ -485,5 +440,3 @@ const App = () => {
     </div>
   );
 };
-
-export default App;
