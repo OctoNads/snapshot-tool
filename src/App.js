@@ -1,32 +1,90 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useReducer } from "react";
 import { jsPDF } from "jspdf";
 import "./App.css";
 
-const App = () => {
-  const [contractAddress, setContractAddress] = useState("");
-  const [minNFTs, setMinNFTs] = useState("");
-  const [holderCount, setHolderCount] = useState("");
-  const [result, setResult] = useState([]); // Store all fetched holders
-  const [collectionMetadata, setCollectionMetadata] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [accessGranted, setAccessGranted] = useState(false);
-  const [accessInput, setAccessInput] = useState("");
-  const [accessError, setAccessError] = useState(false);
-  const [floatingTextStyles, setFloatingTextStyles] = useState([]);
-  const [showCompletion, setShowCompletion] = useState(false);
-  const [fileFormat, setFileFormat] = useState("pdf");
-  const [fetchError, setFetchError] = useState("");
-  const [currentPageIndex, setCurrentPageIndex] = useState(1); // Track current page for pagination
-  const [hasMorePages, setHasMorePages] = useState(true); // Track if more data is available
+// Initial state for useReducer
+const initialState = {
+  contractAddress: "",
+  minNFTs: "",
+  holderCount: "",
+  result: [],
+  collectionMetadata: null,
+  isLoading: false,
+  fetchError: "",
+  showCompletion: false,
+  fileFormat: "pdf",
+  accessGranted: false,
+  accessInput: "",
+  accessError: false,
+  floatingTextStyles: [],
+};
 
-  // Request notification permission
+// Reducer function for state management
+const reducer = (state, action) => {
+  switch (action.type) {
+    case "SET_CONTRACT_ADDRESS":
+      return { ...state, contractAddress: action.payload };
+    case "SET_MIN_NFTS":
+      return { ...state, minNFTs: action.payload };
+    case "SET_HOLDER_COUNT":
+      return { ...state, holderCount: action.payload };
+    case "SET_RESULT":
+      return { ...state, result: action.payload };
+    case "SET_COLLECTION_METADATA":
+      return { ...state, collectionMetadata: action.payload };
+    case "SET_IS_LOADING":
+      return { ...state, isLoading: action.payload };
+    case "SET_FETCH_ERROR":
+      return { ...state, fetchError: action.payload };
+    case "SET_SHOW_COMPLETION":
+      return { ...state, showCompletion: action.payload };
+    case "SET_FILE_FORMAT":
+      return { ...state, fileFormat: action.payload };
+    case "SET_ACCESS_GRANTED":
+      return { ...state, accessGranted: action.payload };
+    case "SET_ACCESS_INPUT":
+      return { ...state, accessInput: action.payload };
+    case "SET_ACCESS_ERROR":
+      return { ...state, accessError: action.payload };
+    case "SET_FLOATING_TEXT_STYLES":
+      return { ...state, floatingTextStyles: action.payload };
+    default:
+      return state;
+  }
+};
+
+const App = () => {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const {
+    contractAddress,
+    minNFTs,
+    holderCount,
+    result,
+    collectionMetadata,
+    isLoading,
+    fetchError,
+    showCompletion,
+    fileFormat,
+    accessGranted,
+    accessInput,
+    accessError,
+    floatingTextStyles,
+  } = state;
+
+  // Request notification permission on mount
   useEffect(() => {
-    if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
-      Notification.requestPermission().catch((err) => console.error("Notification permission error:", err));
+    if (
+      "Notification" in window &&
+      Notification.permission !== "granted" &&
+      Notification.permission !== "denied"
+    ) {
+      Notification.requestPermission().catch((err) =>
+        console.error("Notification permission error:", err)
+      );
     }
   }, []);
 
-  // Floating text animation
+  // Floating text animation setup
   useEffect(() => {
     const floatingTexts = [
       "GMONAD",
@@ -43,7 +101,7 @@ const App = () => {
     ];
 
     const initialStyles = floatingTexts.map(() => ({}));
-    setFloatingTextStyles(initialStyles);
+    dispatch({ type: "SET_FLOATING_TEXT_STYLES", payload: initialStyles });
 
     const moveFloatingTexts = () => {
       const maxX = window.innerWidth - 100;
@@ -52,10 +110,8 @@ const App = () => {
         left: `${Math.random() * maxX}px`,
         top: `${Math.random() * maxY}px`,
         transition: "all 5s linear",
-        WebkitTransition: "all 5s linear", // Safari compatibility
-        MozTransition: "all 5s linear",    // Firefox compatibility
       }));
-      setFloatingTextStyles(newStyles);
+      dispatch({ type: "SET_FLOATING_TEXT_STYLES", payload: newStyles });
     };
 
     moveFloatingTexts();
@@ -63,77 +119,57 @@ const App = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Handle access submission
+  // Handle access code submission
   const handleAccessSubmit = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const input = accessInput.trim().toUpperCase();
     if (input === "GOCTO") {
-      setAccessGranted(true);
-      setAccessError(false);
+      dispatch({ type: "SET_ACCESS_GRANTED", payload: true });
+      dispatch({ type: "SET_ACCESS_ERROR", payload: false });
     } else {
-      setAccessError(true);
+      dispatch({ type: "SET_ACCESS_ERROR", payload: true });
     }
   };
 
-  // Fetch NFT holders from backend
+  // Fetch NFT holders from backend (single page)
   const fetchNFTHolders = async (contractAddress, pageIndex = 1, pageSize = 10) => {
-    const url = `/api/holders?contractAddress=${encodeURIComponent(contractAddress)}&pageIndex=${pageIndex}&pageSize=${pageSize}`;
+    const url = `/api/holders?contractAddress=${encodeURIComponent(
+      contractAddress
+    )}&pageIndex=${pageIndex}&pageSize=${pageSize}`;
     const response = await fetch(url);
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
+      throw new Error(`HTTP error! Status: ${response.status}`);
     }
     return response.json();
   };
 
-  // Fetch all holders with pagination and retry logic
-  const fetchAllNFTHolders = async (startOver = false) => {
-    if (!hasMorePages && !fetchError) return; // Stop if no more pages and no error to retry
-
-    setIsLoading(true);
-    setFetchError(""); // Clear previous errors if starting over
-
-    const pageSize = 10;
+  // Fetch all holders with pagination
+  const fetchAllNFTHolders = async (contractAddress, pageSize = 10) => {
+    let allHolders = [];
+    let metadata = null;
+    let pageIndex = 1;
     const batchSize = 5;
-    let allHolders = startOver ? [] : [...result]; // Preserve existing holders unless starting over
-    let metadata = collectionMetadata;
-    let pageIndex = startOver ? 1 : currentPageIndex;
 
     try {
-      const fetchPromises = [];
-      for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
-        fetchPromises.push(fetchNFTHolders(contractAddress, pageIndex + i, pageSize));
-      }
-      const batchResults = await Promise.all(fetchPromises);
-
-      let hasMore = false;
-      for (const result of batchResults) {
-        if (!metadata) metadata = result.metadata;
-        allHolders.push(...result.holders);
-        if (result.holders.length === pageSize) hasMore = true; // More pages if full batch received
-      }
-
-      const minNFTsValue = parseInt(minNFTs, 10) - 1 || 0;
-      const filteredHolders = filterHolders(allHolders, minNFTsValue);
-
-      setResult(filteredHolders);
-      setHolderCount(`Number of Holders holding at least ${minNFTs || 1} NFT(s): ${filteredHolders.length}`);
-      setCollectionMetadata(metadata);
-      setCurrentPageIndex(pageIndex + batchSize);
-      setHasMorePages(hasMore);
-
-      if (!hasMore) {
-        setShowCompletion(true);
-        if ("Notification" in window && Notification.permission === "granted") {
-          new Notification("Fetching Completed", {
-            body: "All NFT holders have been successfully fetched!",
-          });
+      while (true) {
+        const fetchPromises = [];
+        for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
+          fetchPromises.push(fetchNFTHolders(contractAddress, pageIndex + i, pageSize));
         }
+        const batchResults = await Promise.all(fetchPromises);
+        let hasMorePages = false;
+        for (const result of batchResults) {
+          if (!metadata) metadata = result.metadata;
+          allHolders.push(...result.holders);
+          if (result.total && allHolders.length < result.total) hasMorePages = true;
+          else if (result.holders.length === pageSize) hasMorePages = true;
+        }
+        pageIndex += batchSize;
+        if (!hasMorePages || fetchPromises.length < batchSize) break;
       }
+      return { holders: allHolders, metadata };
     } catch (error) {
-      setFetchError(error.message);
-    } finally {
-      setIsLoading(false);
+      throw new Error(`Failed to fetch holders: ${error.message}`);
     }
   };
 
@@ -142,49 +178,77 @@ const App = () => {
     return holders.filter((holder) => Number(holder.amount) > minNFTs);
   };
 
-  // Form submission (start fetching from scratch)
+  // Handle form submission
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (!/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) {
-      setHolderCount("");
-      setResult([]);
-      setCollectionMetadata(null);
-      setFetchError("Invalid contract address format.");
+      dispatch({ type: "SET_HOLDER_COUNT", payload: "" });
+      dispatch({ type: "SET_RESULT", payload: [] });
+      dispatch({ type: "SET_COLLECTION_METADATA", payload: null });
+      dispatch({
+        type: "SET_FETCH_ERROR",
+        payload: "Invalid contract address format.",
+      });
       return;
     }
 
-    let minNFTsValue = parseInt(minNFTs, 10) - 1;
-    if (minNFTs && (isNaN(minNFTsValue) || minNFTsValue < 0)) {
-      alert("Please enter a valid minimum NFT count (positive integer).");
-      return;
+    let minNFTsValue = 0;
+    if (minNFTs) {
+      minNFTsValue = parseInt(minNFTs, 10) - 1;
+      if (isNaN(minNFTsValue) || minNFTsValue < 0) {
+        alert("Please enter a valid minimum NFT count (positive integer).");
+        return;
+      }
     }
 
-    setHolderCount("");
-    setResult([]);
-    setCollectionMetadata(null);
-    setCurrentPageIndex(1);
-    setHasMorePages(true);
-    fetchAllNFTHolders(true); // Start over
+    dispatch({ type: "SET_IS_LOADING", payload: true });
+    dispatch({ type: "SET_FETCH_ERROR", payload: "" });
+    dispatch({ type: "SET_HOLDER_COUNT", payload: "" });
+    dispatch({ type: "SET_RESULT", payload: [] });
+    dispatch({ type: "SET_COLLECTION_METADATA", payload: null });
+
+    try {
+      const { holders, metadata } = await fetchAllNFTHolders(contractAddress);
+      if (holders.length > 0) {
+        const filteredHolders = filterHolders(holders, minNFTsValue);
+        dispatch({
+          type: "SET_HOLDER_COUNT",
+          payload: `Number of Holders holding at least ${minNFTs || 1} NFT(s): ${
+            filteredHolders.length
+          }`,
+        });
+        dispatch({ type: "SET_RESULT", payload: filteredHolders });
+        dispatch({ type: "SET_COLLECTION_METADATA", payload: metadata });
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("Fetching Completed", {
+            body: "NFT holders have been successfully fetched!",
+          });
+        }
+        dispatch({ type: "SET_SHOW_COMPLETION", payload: true });
+      } else {
+        dispatch({ type: "SET_HOLDER_COUNT", payload: "Number of holders: 0" });
+        dispatch({ type: "SET_RESULT", payload: [] });
+        dispatch({ type: "SET_COLLECTION_METADATA", payload: null });
+        dispatch({ type: "SET_SHOW_COMPLETION", payload: true });
+      }
+    } catch (error) {
+      dispatch({ type: "SET_FETCH_ERROR", payload: error.message });
+    } finally {
+      dispatch({ type: "SET_IS_LOADING", payload: false });
+    }
   };
 
-  // Retry fetching from current page
-  const handleRetry = () => {
-    fetchAllNFTHolders(false); // Continue from current page
-  };
-
-  // Reset form
+  // Reset form fields
   const handleReset = () => {
-    setContractAddress("");
-    setMinNFTs("");
-    setHolderCount("");
-    setResult([]);
-    setCollectionMetadata(null);
-    setFetchError("");
-    setCurrentPageIndex(1);
-    setHasMorePages(true);
+    dispatch({ type: "SET_CONTRACT_ADDRESS", payload: "" });
+    dispatch({ type: "SET_MIN_NFTS", payload: "" });
+    dispatch({ type: "SET_HOLDER_COUNT", payload: "" });
+    dispatch({ type: "SET_RESULT", payload: [] });
+    dispatch({ type: "SET_COLLECTION_METADATA", payload: null });
+    dispatch({ type: "SET_FETCH_ERROR", payload: "" });
   };
 
-  // Download results
+  // Download results as PDF or XML
   const handleDownload = () => {
     const addresses = result.map((holder) => holder.ownerAddress).filter((addr) => addr);
     if (addresses.length === 0) {
@@ -228,24 +292,16 @@ const App = () => {
           <div className="header-spacer"></div>
         </header>
         <div className="container">
-          {fetchError && (
-            <div className="error-message">
-              {fetchError}
-              <br />
-              {result.length > 0 && (
-                <button onClick={handleRetry} disabled={isLoading}>
-                  Retry Fetching More
-                </button>
-              )}
-            </div>
-          )}
+          {fetchError && <div className="error-message">{fetchError}</div>}
           <form onSubmit={handleFormSubmit}>
             <label htmlFor="contractAddress">NFT Contract Address:</label>
             <input
               type="text"
               id="contractAddress"
               value={contractAddress}
-              onChange={(e) => setContractAddress(e.target.value)}
+              onChange={(e) =>
+                dispatch({ type: "SET_CONTRACT_ADDRESS", payload: e.target.value })
+              }
               placeholder="e.g., 0x..."
               required
               aria-required="true"
@@ -255,12 +311,12 @@ const App = () => {
               type="number"
               id="minNFTs"
               value={minNFTs}
-              onChange={(e) => setMinNFTs(e.target.value)}
+              onChange={(e) => dispatch({ type: "SET_MIN_NFTS", payload: e.target.value })}
               min="1"
               placeholder="Enter minimum NFT count"
             />
             <button type="submit" disabled={isLoading}>
-              {isLoading ? "Loading..." : fetchError && result.length === 0 ? "Try Again" : "Find Holders"}
+              {isLoading ? "Loading..." : fetchError ? "Try Again" : "Find Holders"}
             </button>
             <button type="button" onClick={handleReset} disabled={isLoading}>
               Reset
@@ -318,7 +374,8 @@ const App = () => {
           )}
           {!collectionMetadata && holderCount && (
             <p className="metadata-unavailable">
-              Collection metadata not available for this contract address. Contact the OctoNads Team to get it uploaded.
+              Collection metadata not available for this contract address. Contact the OctoNads
+              Team to get it uploaded.
             </p>
           )}
 
@@ -346,7 +403,7 @@ const App = () => {
             <select
               id="fileFormat"
               value={fileFormat}
-              onChange={(e) => setFileFormat(e.target.value)}
+              onChange={(e) => dispatch({ type: "SET_FILE_FORMAT", payload: e.target.value })}
             >
               <option value="pdf">PDF</option>
               <option value="xml">XML</option>
@@ -355,23 +412,24 @@ const App = () => {
               Download
             </button>
           </div>
-
-          {/* Load More button if there are more pages and no error */}
-          {result.length > 0 && hasMorePages && !fetchError && (
-            <button onClick={() => fetchAllNFTHolders(false)} disabled={isLoading}>
-              {isLoading ? "Loading..." : "Load More Holders"}
-            </button>
-          )}
         </div>
 
         {/* Floating texts */}
         {floatingTextStyles.map((style, index) => (
-          <div
-            key={index}
-            className="floating-text"
-            style={{ ...style, MozTransition: style.transition, WebkitTransition: style.transition }}
-          >
-            {floatingTexts[index]}
+          <div key={index} className="floating-text" style={style}>
+            {[
+              "GMONAD",
+              "GOCTO",
+              "GCHOG",
+              "GCHOGSTAR",
+              "GMOO",
+              "GDAKS",
+              "G10K",
+              "GBLOCK",
+              "GMEOW",
+              "GMOPO",
+              "GCANZ",
+            ][index]}
           </div>
         ))}
 
@@ -399,7 +457,7 @@ const App = () => {
               type="text"
               id="accessInput"
               value={accessInput}
-              onChange={(e) => setAccessInput(e.target.value)}
+              onChange={(e) => dispatch({ type: "SET_ACCESS_INPUT", payload: e.target.value })}
               placeholder="Type GOCTO"
               autoFocus
               required
@@ -421,26 +479,14 @@ const App = () => {
           <div className="modal-content">
             <h2>Fetching Completed</h2>
             <p>NFT holders have been successfully fetched!</p>
-            <button onClick={() => setShowCompletion(false)}>OK</button>
+            <button onClick={() => dispatch({ type: "SET_SHOW_COMPLETION", payload: false })}>
+              OK
+            </button>
           </div>
         </div>
       )}
     </div>
   );
 };
-
-const floatingTexts = [
-  "GMONAD",
-  "GOCTO",
-  "GCHOG",
-  "GCHOGSTAR",
-  "GMOO",
-  "GDAKS",
-  "G10K",
-  "GBLOCK",
-  "GMEOW",
-  "GMOPO",
-  "GCANZ",
-];
 
 export default App;
