@@ -17,10 +17,6 @@ const App = () => {
   const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [fileFormat, setFileFormat] = useState("pdf");
   const [fetchError, setFetchError] = useState("");
-  const [progress, setProgress] = useState("");
-
-  // In-memory cache for API responses
-  const cache = new Map();
 
   // Request notification permission on mount
   useEffect(() => {
@@ -78,68 +74,41 @@ const App = () => {
 
   // Fetch NFT holders from backend (single page)
   const fetchNFTHolders = async (contractAddress, pageIndex = 1, pageSize = 10) => {
-    const cacheKey = `${contractAddress}-${pageIndex}-${pageSize}`;
-    if (cache.has(cacheKey)) {
-      return cache.get(cacheKey);
-    }
-
     const url = `/api/holders?contractAddress=${encodeURIComponent(contractAddress)}&pageIndex=${pageIndex}&pageSize=${pageSize}`;
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
-    const data = await response.json();
-    cache.set(cacheKey, data);
-    return data;
+    return response.json();
   };
 
   // Fetch all NFT holders with pagination
-  const fetchAllNFTHolders = async (contractAddress, pageSize = 10, onProgress) => {
+  const fetchAllNFTHolders = async (contractAddress, pageSize = 10) => {
     let allHolders = [];
     let metadata = null;
-    const maxPages = 1000;
+    let pageIndex = 1;
+    const batchSize = 5;
 
     try {
-      // Fetch the first page to get total count
-      const firstPage = await fetchNFTHolders(contractAddress, 1, pageSize);
-      metadata = firstPage.metadata;
-      allHolders.push(...firstPage.holders);
-      const totalHolders = firstPage.total;
-
-      if (!totalHolders) {
-        throw new Error("Total holders count not available");
+      while (true) {
+        const fetchPromises = [];
+        for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
+          fetchPromises.push(fetchNFTHolders(contractAddress, pageIndex + i, pageSize));
+        }
+        const batchResults = await Promise.all(fetchPromises);
+        let hasMorePages = false;
+        for (const result of batchResults) {
+          if (!metadata) metadata = result.metadata;
+          allHolders.push(...result.holders);
+          if (result.total && allHolders.length < result.total) hasMorePages = true;
+          else if (result.holders.length === pageSize) hasMorePages = true;
+        }
+        pageIndex += batchSize;
+        if (!hasMorePages || fetchPromises.length < batchSize) break;
       }
-
-      const totalPages = Math.min(Math.ceil(totalHolders / pageSize), maxPages);
-      onProgress(1, totalPages); // Report first page
-
-      if (totalPages <= 1) {
-        return { holders: allHolders, metadata };
-      }
-
-      // Fetch remaining pages in parallel
-      const fetchPromises = [];
-      for (let i = 2; i <= totalPages; i++) {
-        fetchPromises.push(
-          fetchNFTHolders(contractAddress, i, pageSize).then((result) => {
-            onProgress(i, totalPages);
-            return result;
-          })
-        );
-      }
-
-      const results = await Promise.all(fetchPromises);
-      results.forEach((result) => allHolders.push(...result.holders));
-
       return { holders: allHolders, metadata };
     } catch (error) {
-      let message = "Failed to fetch holders";
-      if (error.message.includes("HTTP error")) {
-        message = `Server error: ${error.message}`;
-      } else if (error.message.includes("network")) {
-        message = "Network issue, please check your connection";
-      }
-      throw new Error(message);
+      throw new Error(`Failed to fetch holders: ${error.message}`);
     }
   };
 
@@ -174,18 +143,13 @@ const App = () => {
     setHolderCount("");
     setResult([]);
     setCollectionMetadata(null);
-    setProgress("Fetching...");
 
     setTimeout(() => {
       setShowInfoPopup(false);
     }, 8000);
 
     try {
-      const updateProgress = (current, total) => {
-        setProgress(`Fetched ${current}/${total} pages`);
-      };
-
-      const { holders, metadata } = await fetchAllNFTHolders(contractAddress, 10, updateProgress);
+      const { holders, metadata } = await fetchAllNFTHolders(contractAddress);
       if (holders.length > 0) {
         const filteredHolders = filterHolders(holders, minNFTsValue);
         setHolderCount(`Number of Holders holding at least ${minNFTs || 1} NFT(s): ${filteredHolders.length}`);
@@ -207,7 +171,6 @@ const App = () => {
       setFetchError(error.message);
     } finally {
       setIsLoading(false);
-      setProgress("");
     }
   };
 
@@ -227,14 +190,14 @@ const App = () => {
       alert("No holders to download.");
       return;
     }
-
+  
     if (fileFormat === "pdf") {
       const doc = new jsPDF();
       const lineHeight = 10; // Height per line
       const pageHeight = doc.internal.pageSize.height; // Typically 297mm or ~842 points for A4
       const margin = 10; // Top and bottom margin
       let y = margin; // Starting y-position
-
+  
       addresses.forEach((addr, index) => {
         // Check if the current line exceeds the page height
         if (y + lineHeight > pageHeight - margin) {
@@ -244,7 +207,7 @@ const App = () => {
         doc.text(addr, margin, y); // Add the address at the current position
         y += lineHeight; // Move to the next line
       });
-
+  
       doc.save("holders.pdf");
     } else if (fileFormat === "xml") {
       const xmlContent = `<holders>\n${addresses
@@ -367,19 +330,19 @@ const App = () => {
           {holderCount && <div id="holderCount">{holderCount}</div>}
           <div id="result">
             {isLoading ? (
-              <div>
-                <div className="spinner"></div>
-                <p>{progress}</p>
-              </div>
+              <div className="spinner"></div>
             ) : result.length > 0 ? (
-              <ul>
-                {result.slice(0, 50).map((holder, index) => (
-                  <li key={index}>
-                    {holder.ownerAddress} - Amount: {holder.amount}
-                  </li>
-                ))}
-                {result.length > 50 && <p>And {result.length - 50} more...</p>}
-              </ul>
+              Array.isArray(result) && result[0].ownerAddress ? (
+                <ul>
+                  {result.map((holder, index) => (
+                    <li key={index}>
+                      {holder.ownerAddress} - Amount: {holder.amount}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>{result[0]}</p>
+              )
             ) : (
               <p>Holders will appear here...</p>
             )}
@@ -452,7 +415,7 @@ const App = () => {
         </div>
       </div>
 
-      {/* Info Popup Modal (Shown for 8 seconds when fetching starts) */}
+      {/* Info Popup Modal (Shown for 5 seconds when fetching starts) */}
       {showInfoPopup && (
         <div className="modal" id="infoModal">
           <div className="modal-content">

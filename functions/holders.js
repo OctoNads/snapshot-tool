@@ -1,4 +1,5 @@
 const axios = require('axios');
+
 const collectionMetadata = {
     "0x6341c537a6fc563029d8e8caa87da37f227358f4": {
         name: "Molandaks Mint Pass",
@@ -314,26 +315,13 @@ const collectionMetadata = {
     },
 };
 
-
-// Fetch with retry logic for transient errors
-const fetchWithRetry = async (url, options, retries = 3, delay = 1000) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await axios.get(url, options);
-    } catch (error) {
-      if (i === retries - 1 || ![429, "ECONNABORTED"].includes(error.code)) throw error;
-      await new Promise((resolve) => setTimeout(resolve, delay * (i + 1)));
-    }
-  }
-};
-
 exports.handler = async (event) => {
   const { contractAddress, pageIndex = 1, pageSize = 10 } = event.queryStringParameters || {};
 
   if (!contractAddress) {
     return {
       statusCode: 400,
-      body: JSON.stringify({ error: "Missing contractAddress parameter" }),
+      body: JSON.stringify({ error: 'Missing contractAddress parameter' }),
     };
   }
 
@@ -343,34 +331,27 @@ exports.handler = async (event) => {
   if (isNaN(pageIndexNum) || isNaN(pageSizeNum) || pageIndexNum < 1 || pageSizeNum < 1) {
     return {
       statusCode: 400,
-      body: JSON.stringify({ error: "Invalid pageIndex or pageSize" }),
+      body: JSON.stringify({ error: 'Invalid pageIndex or pageSize' }),
     };
   }
 
   try {
-    const url = `https://api.blockvision.org/v2/monad/collection/holders?contractAddress=${encodeURIComponent(
-      contractAddress
-    )}&pageIndex=${pageIndexNum}&pageSize=${pageSizeNum}`;
+    const url = `https://api.blockvision.org/v2/monad/collection/holders?contractAddress=${encodeURIComponent(contractAddress)}&pageIndex=${pageIndexNum}&pageSize=${pageSizeNum}`;
     console.log(`Fetching: ${url}`);
-    const response = await fetchWithRetry(
-      url,
-      {
-        headers: {
-          accept: "application/json",
-          "x-api-key": process.env.API_KEY,
-        },
-        timeout: parseInt(process.env.API_TIMEOUT) || 30000, // Default to 30 seconds
+    const response = await axios.get(url, {
+      headers: {
+        accept: 'application/json',
+        'x-api-key': process.env.API_KEY,
       },
-      3, // Retry 3 times
-      1000 // Initial delay of 1 second
-    );
+      timeout: 20000,
+    });
 
     console.log(`Response code: ${response.data.code}, Result: ${JSON.stringify(response.data.result)}`);
     if (response.data.code !== 0 || !response.data.result || !Array.isArray(response.data.result.data)) {
-      console.error("Invalid API response:", response.data);
+      console.error('Invalid API response:', response.data);
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: response.data.message || "Invalid API response" }),
+        body: JSON.stringify({ error: response.data.message || 'Invalid API response' }),
       };
     }
 
@@ -383,14 +364,9 @@ exports.handler = async (event) => {
     };
   } catch (error) {
     console.error(`Error fetching holders for ${contractAddress}, page ${pageIndex}:`, error.message, error.response?.data);
-    const status = error.response?.status || 500;
-    let message = "Failed to fetch holders";
-    if (status === 429) message = "Rate limit exceeded, please try again later";
-    else if (status >= 500) message = "Server error, please try again later";
-    else if (error.code === "ECONNABORTED") message = "Request timed out";
     return {
-      statusCode: status,
-      body: JSON.stringify({ error: message }),
+      statusCode: error.response?.status || 500,
+      body: JSON.stringify({ error: error.message || 'Failed to fetch holders' }),
     };
   }
 };
