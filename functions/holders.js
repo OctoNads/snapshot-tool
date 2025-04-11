@@ -44,7 +44,7 @@ const collectionMetadata = {
         discord: ""
     },
 
-    "0x87E1F1824C9356733A25d6beD6b9c87A3b31E1070x87E1F1824C9356733A25d6beD6b9c87A3b31E107": {
+    "0x87E1F1824C9356733A25d6beD6b9c87A3b31E107": {
         name: "Spikes",
         supply: 3333,
         image: "https://img-cdn.magiceden.dev/rs:fill:400:0:0/plain/https%3A%2F%2Fimg.reservoir.tools%2Fimages%2Fv2%2Fmonad-testnet%2Fi9YO%252F4yHXUdJsWcTqhqvf0aTPGa7dMbaoJpVINCUIuTbYpz%252FAM0ZI38bbmW5peeVIgH4fvhO%252Fqgc3c%252Bvqag4utIVFcylE0oHY%252Bz0sS4qeqGr1xW%252BSbXlJkImE0K8ke9V5W54iuvOLtY6FXTTK4A8kQ%253D%253D",
@@ -330,7 +330,7 @@ exports.handler = async (event) => {
   }
 
   const pageIndexNum = parseInt(pageIndex, 10);
-  const pageSizeNum = Math.min(parseInt(pageSize, 10), 50); // Cap pageSize to avoid overload
+  const pageSizeNum = parseInt(pageSize, 10);
 
   if (isNaN(pageIndexNum) || isNaN(pageSizeNum) || pageIndexNum < 1 || pageSizeNum < 1) {
     return {
