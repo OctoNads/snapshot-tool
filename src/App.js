@@ -87,7 +87,7 @@ const App = () => {
     let allHolders = [];
     let metadata = null;
     let pageIndex = 1;
-    const batchSize = 10;
+    const batchSize = 6;
 
     try {
       while (true) {
