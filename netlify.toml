@@ -1,18 +1,9 @@
 [build]
-  publish = "build"       # Correct folder for frontend’s static files
-  functions = "functions" # Folder with serverless functions
+  command = "npm run build"  # Command to build your project
+  publish = "build"          # Folder for frontend’s static files
+  functions = "functions"    # Folder for serverless functions
 
 [[redirects]]
-  from = "/api/*"         # Route API requests to functions
-  to = "/.netlify/functions/:splat"
-  status = 200
-
-  [build]
-  command = "npm run build"
-  publish = "build"
-  functions = "functions"
-
-[[redirects]]
-  from = "/api/*"
+  from = "/api/*"            # Route API requests to functions
   to = "/.netlify/functions/:splat"
   status = 200
