@@ -112,7 +112,7 @@ const App = () => {
     let allHolders = [];
     let metadata = null;
     let pageIndex = 1;
-    const batchSize = 10; // Fetch 10 pages at a time
+    const batchSize = 5; // Fetch 10 pages at a time
     let total = 0; // Total number of holders, set dynamically from API
 
     while (true) {
