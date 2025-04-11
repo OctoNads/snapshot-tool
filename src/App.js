@@ -184,19 +184,31 @@ const App = () => {
     setFetchError("");
   };
 
-  // Download results as PDF or XML
   const handleDownload = () => {
     const addresses = result.map((holder) => holder.ownerAddress).filter((addr) => addr);
     if (addresses.length === 0) {
       alert("No holders to download.");
       return;
     }
-
+  
     if (fileFormat === "pdf") {
       const doc = new jsPDF();
+      const lineHeight = 10; // Height per line
+      const pageHeight = doc.internal.pageSize.height; // Typically 297mm or ~842 points for A4
+      const margin = 10; // Top and bottom margin
+      const maxLinesPerPage = Math.floor((pageHeight - 2 * margin) / lineHeight); // Number of lines that fit on a page
+      let y = margin; // Starting y-position
+  
       addresses.forEach((addr, index) => {
-        doc.text(addr, 10, 10 + index * 10);
+        // Check if the current line exceeds the page height
+        if (y + lineHeight > pageHeight - margin) {
+          doc.addPage(); // Add a new page
+          y = margin; // Reset y-position to the top of the new page
+        }
+        doc.text(addr, margin, y); // Add the address at the current position
+        y += lineHeight; // Move to the next line
       });
+  
       doc.save("holders.pdf");
     } else if (fileFormat === "xml") {
       const xmlContent = `<holders>\n${addresses
