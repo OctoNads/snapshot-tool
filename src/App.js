@@ -81,7 +81,7 @@ const App = () => {
   // Retry fetch function with exponential backoff
   const retryFetch = async (fn, initialDelay = 1000) => {
     let delay = initialDelay;
-    while (true) {
+    const retry = async () => {
       try {
         return await fn();
       } catch (error) {
@@ -89,8 +89,10 @@ const App = () => {
         await new Promise((resolve) => setTimeout(resolve, delay));
         delay *= 2;
         if (delay > 16000) delay = 16000; // Cap delay at 16 seconds
+        return retry(); // Recursively retry
       }
-    }
+    };
+    return retry();
   };
 
   // Fetch NFT holders for a single page
@@ -110,7 +112,7 @@ const App = () => {
     let allHolders = [];
     let metadata = null;
     let pageIndex = 1;
-    const batchSize = 10; // Fetch 5 pages at a time
+    const batchSize = 10; // Fetch 10 pages at a time
     let total = 0; // Total number of holders, set dynamically from API
 
     while (true) {
@@ -125,14 +127,17 @@ const App = () => {
 
       // Wait for all promises in the batch to resolve
       const batchResults = await Promise.all(fetchPromises);
-      let hasMorePages = false;
 
       // Process each result in the batch
       for (const result of batchResults) {
         if (!metadata && result.metadata) metadata = result.metadata;
         if (total === 0 && result.total) total = result.total; // Set total from first response
         allHolders.push(...result.holders);
-        if (result.holders.length === pageSize) hasMorePages = true;
+        if (allHolders.length < total) {
+          // Continue fetching if more holders are expected
+        } else {
+          break; // Stop if all holders are fetched
+        }
       }
 
       pageIndex += batchSize;
@@ -142,7 +147,7 @@ const App = () => {
       if (allHolders.length >= total || fetchPromises.length < batchSize) break;
 
       // Add delay between batches to avoid overwhelming the server
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // 2-second delay
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // 1-second delay
     }
 
     // Log warning if fewer holders were fetched than expected
