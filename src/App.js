@@ -14,18 +14,18 @@ const App = () => {
   const [accessError, setAccessError] = useState(false);
   const [floatingTextStyles, setFloatingTextStyles] = useState([]);
   const [showCompletion, setShowCompletion] = useState(false);
-  const [showInfoPopup, setShowInfoPopup] = useState(false); // New state for info popup
+  const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [fileFormat, setFileFormat] = useState("pdf");
   const [fetchError, setFetchError] = useState("");
 
-  // Request notification permission
+  // Request notification permission on mount
   useEffect(() => {
     if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
       Notification.requestPermission().catch((err) => console.error("Notification permission error:", err));
     }
   }, []);
 
-  // Floating text animation
+  // Floating text animation setup
   useEffect(() => {
     const floatingTexts = [
       "GMONAD",
@@ -72,7 +72,7 @@ const App = () => {
     }
   };
 
-  // Fetch NFT holders from backend
+  // Fetch NFT holders from backend (single page)
   const fetchNFTHolders = async (contractAddress, pageIndex = 1, pageSize = 10) => {
     const url = `/api/holders?contractAddress=${encodeURIComponent(contractAddress)}&pageIndex=${pageIndex}&pageSize=${pageSize}`;
     const response = await fetch(url);
@@ -82,7 +82,7 @@ const App = () => {
     return response.json();
   };
 
-  // Fetch all holders with pagination
+  // Fetch all NFT holders with pagination
   const fetchAllNFTHolders = async (contractAddress, pageSize = 10) => {
     let allHolders = [];
     let metadata = null;
@@ -117,7 +117,7 @@ const App = () => {
     return holders.filter((holder) => Number(holder.amount) > minNFTs);
   };
 
-  // Form submission
+  // Handle form submission
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (!/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) {
@@ -138,13 +138,12 @@ const App = () => {
     }
 
     setIsLoading(true);
-    setShowInfoPopup(true); // Show the 5-second popup
+    setShowInfoPopup(true);
     setFetchError("");
     setHolderCount("");
     setResult([]);
     setCollectionMetadata(null);
 
-    // Hide the info popup after 5 seconds
     setTimeout(() => {
       setShowInfoPopup(false);
     }, 5000);
@@ -161,12 +160,12 @@ const App = () => {
             body: "NFT holders have been successfully fetched!",
           });
         }
-        setShowCompletion(true); // Show completion popup
+        setShowCompletion(true);
       } else {
         setHolderCount("Number of holders: 0");
         setResult([]);
         setCollectionMetadata(null);
-        setShowCompletion(true); // Show completion popup
+        setShowCompletion(true);
       }
     } catch (error) {
       setFetchError(error.message);
@@ -185,7 +184,7 @@ const App = () => {
     setFetchError("");
   };
 
-  // Download results
+  // Download results as PDF or XML
   const handleDownload = () => {
     const addresses = result.map((holder) => holder.ownerAddress).filter((addr) => addr);
     if (addresses.length === 0) {
@@ -320,7 +319,7 @@ const App = () => {
           {holderCount && <div id="holderCount">{holderCount}</div>}
           <div id="result">
             {isLoading ? (
-              <div className="spinner"></div> // Show rotating spinner during loading
+              <div className="spinner"></div>
             ) : result.length > 0 ? (
               Array.isArray(result) && result[0].ownerAddress ? (
                 <ul>
@@ -361,7 +360,7 @@ const App = () => {
             className="floating-text"
             style={{ ...style, MozTransition: style.transition, WebkitTransition: style.transition }}
           >
-            {floatingTexts[index]}
+            {["GMONAD", "GOCTO", "GCHOG", "GCHOGSTAR", "GMOO", "GDAKS", "G10K", "GBLOCK", "GMEOW", "GMOPO", "GCANZ"][index]}
           </div>
         ))}
 
@@ -430,19 +429,5 @@ const App = () => {
     </div>
   );
 };
-
-const floatingTexts = [
-  "GMONAD",
-  "GOCTO",
-  "GCHOG",
-  "GCHOGSTAR",
-  "GMOO",
-  "GDAKS",
-  "G10K",
-  "GBLOCK",
-  "GMEOW",
-  "GMOPO",
-  "GCANZ",
-];
 
 export default App;

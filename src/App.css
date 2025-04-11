@@ -28,10 +28,10 @@ body {
   -webkit-text-size-adjust: 100%; /* Prevents iOS from resizing text */
 }
 
-/* Blur effect */
-.blur {
-  filter: blur(5px) !important;
-  -webkit-filter: blur(5px) !important;
+/* Blur effect for content when access is not granted */
+.blur-content {
+  filter: blur(5px);
+  -webkit-filter: blur(5px);
 }
 
 /* Sticky header */
@@ -82,7 +82,6 @@ body {
 /* Header spacer */
 .header-spacer {
   width: 50px;
-  margin-left: 50px;
 }
 
 /* Main container */
@@ -215,19 +214,17 @@ footer {
 
 /* Modal styling */
 .modal {
-  display: none; /* Hidden by default */
   position: fixed;
-  z-index: 1000;
+  z-index: 1001; /* Above header */
   left: 0;
   top: 0;
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.8);
-  -webkit-backdrop-filter: blur(5px); /* For Safari */
-  backdrop-filter: blur(5px); /* Standard for Chrome, Firefox, etc. */
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
 }
 
-/* Modal content */
 .modal-content {
   margin: 15% auto;
   width: 300px;
@@ -241,10 +238,6 @@ footer {
   box-shadow: 0 4px 20px var(--shadow-color);
   -webkit-animation: slideIn 0.3s ease;
   animation: slideIn 0.3s ease;
-}
-
-.modal.active {
-  display: block; /* Show modal when active class is added */
 }
 
 /* Animation for modal */
@@ -315,87 +308,27 @@ footer {
   font-size: 24px;
 }
 
-/* Completion modal */
-#completionModal {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  -webkit-transform: translate(-50%, -50%);
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
+/* Error message */
+.error-message {
+  color: #ff4d4d;
+  margin-bottom: 15px;
   text-align: center;
-  font-family: Arial, sans-serif;
 }
 
-#completionModal h2 {
-  font-size: 24px;
-  margin-bottom: 10px;
-  color: #333;
+/* Spinner */
+.spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-left-color: #7986cb;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
 }
 
-#completionModal p {
-  font-size: 16px;
-  margin-bottom: 20px;
-  color: #666;
-}
-
-#completionModal button {
-  padding: 10px 20px;
-  background-color: #5b43c4;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 16px;
-}
-
-#completionModal button:hover {
-  background-color: #37287c;
-}
-
-/* Media queries for responsiveness */
-@media (max-width: 768px) {
-  .sticky-header {
-    padding: 5px 10px;
-  }
-
-  .header-logo {
-    width: 40px;
-    height: 40px;
-  }
-
-  .header-title h1 {
-    font-size: 1.5em;
-  }
-
-  .header-title .subheading {
-    font-size: 12px;
-  }
-
-  button {
-    width: 100%;
-    margin: 10px 0;
-  }
-
-  footer {
-    flex-direction: column;
-    padding: 15px;
-  }
-
-  .copyright,
-  .powered-by,
-  .social-icons {
-    margin: 5px 0;
-    text-align: center;
-  }
-
-  .social-icons {
-    display: flex;
-    justify-content: center;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -493,18 +426,44 @@ footer {
   -webkit-transform: scale(1.15);
 }
 
-.spinner {
-  border: 4px solid rgba(0, 0, 0, 0.1);
-  border-left-color: #7986cb; /* A nice indigo color */
-  border-radius: 50%;
-  width: 36px;
-  height: 36px;
-  animation: spin 1s linear infinite;
-  margin: 0 auto;
-}
+/* Media queries for responsiveness */
+@media (max-width: 768px) {
+  .sticky-header {
+    padding: 5px 10px;
+  }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
+  .header-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .header-title h1 {
+    font-size: 1.5em;
+  }
+
+  .header-title .subheading {
+    font-size: 12px;
+  }
+
+  button {
+    width: 100%;
+    margin: 10px 0;
+  }
+
+  footer {
+    flex-direction: column;
+    padding: 15px;
+  }
+
+  .copyright,
+  .powered-by,
+  .social-icons {
+    margin: 5px 0;
+    text-align: center;
+  }
+
+  .social-icons {
+    display: flex;
+    justify-content: center;
   }
 }
