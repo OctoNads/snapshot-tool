@@ -313,11 +313,7 @@ const collectionMetadata = {
         twitter: "https://x.com/OctoNads",
         discord: "discord.gg/octonads"
     },
-
-
-
 };
-
 
 exports.handler = async (event) => {
   const { contractAddress, pageIndex = 1, pageSize = 10 } = event.queryStringParameters || {};
@@ -347,7 +343,7 @@ exports.handler = async (event) => {
         accept: 'application/json',
         'x-api-key': process.env.API_KEY,
       },
-      timeout: 10000,
+      timeout: 15000,
     });
 
     console.log(`Response code: ${response.data.code}, Result: ${JSON.stringify(response.data.result)}`);
