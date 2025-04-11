@@ -87,7 +87,7 @@ const App = () => {
     let allHolders = [];
     let metadata = null;
     let pageIndex = 1;
-    const batchSize = 10;
+    const batchSize = 5;
 
     try {
       while (true) {
@@ -440,3 +440,5 @@ const App = () => {
     </div>
   );
 };
+
+export default App;
