@@ -27,8 +27,17 @@ const App = () => {
   // Floating text animation
   useEffect(() => {
     const floatingTexts = [
-      "GMONAD", "GOCTO", "GCHOG", "GCHOGSTAR", "GMOO", "GDAKS",
-      "G10K", "GBLOCK", "GMEOW", "GMOPO", "GCANZ",
+      "GMONAD",
+      "GOCTO",
+      "GCHOG",
+      "GCHOGSTAR",
+      "GMOO",
+      "GDAKS",
+      "G10K",
+      "GBLOCK",
+      "GMEOW",
+      "GMOPO",
+      "GCANZ",
     ];
 
     const initialStyles = floatingTexts.map(() => ({}));
@@ -67,31 +76,39 @@ const App = () => {
     const url = `/api/holders?contractAddress=${encodeURIComponent(contractAddress)}&pageIndex=${pageIndex}&pageSize=${pageSize}`;
     const response = await fetch(url);
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
+      throw new Error(`HTTP error! Status: ${response.status}`);
     }
     return response.json();
   };
 
-  // Fetch all holders with client-side pagination
+  // Fetch all holders with pagination
   const fetchAllNFTHolders = async (contractAddress, pageSize = 10) => {
     let allHolders = [];
     let metadata = null;
     let pageIndex = 1;
-    let hasMorePages = true;
+    const batchSize = 5;
 
-    while (hasMorePages) {
-      try {
-        const data = await fetchNFTHolders(contractAddress, pageIndex, pageSize);
-        if (!metadata) metadata = data.metadata;
-        allHolders = [...allHolders, ...data.holders];
-        hasMorePages = data.holders.length === pageSize && allHolders.length < (data.total || Infinity);
-        pageIndex += 1;
-      } catch (error) {
-        throw new Error(`Failed to fetch page ${pageIndex}: ${error.message}`);
+    try {
+      while (true) {
+        const fetchPromises = [];
+        for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
+          fetchPromises.push(fetchNFTHolders(contractAddress, pageIndex + i, pageSize));
+        }
+        const batchResults = await Promise.all(fetchPromises);
+        let hasMorePages = false;
+        for (const result of batchResults) {
+          if (!metadata) metadata = result.metadata;
+          allHolders.push(...result.holders);
+          if (result.total && allHolders.length < result.total) hasMorePages = true;
+          else if (result.holders.length === pageSize) hasMorePages = true;
+        }
+        pageIndex += batchSize;
+        if (!hasMorePages || fetchPromises.length < batchSize) break;
       }
+      return { holders: allHolders, metadata };
+    } catch (error) {
+      throw new Error(`Failed to fetch holders: ${error.message}`);
     }
-    return { holders: allHolders, metadata };
   };
 
   // Filter holders by minimum NFT count
@@ -159,7 +176,6 @@ const App = () => {
     setResult([]);
     setCollectionMetadata(null);
     setFetchError("");
-    setShowCompletion(false);
   };
 
   // Download results
@@ -206,7 +222,11 @@ const App = () => {
           <div className="header-spacer"></div>
         </header>
         <div className="container">
-          {fetchError && <div className="error-message">{fetchError}</div>}
+          {fetchError && (
+            <div className="error-message">
+              {fetchError}
+            </div>
+          )}
           <form onSubmit={handleFormSubmit}>
             <label htmlFor="contractAddress">NFT Contract Address:</label>
             <input
@@ -325,6 +345,7 @@ const App = () => {
           </div>
         </div>
 
+        {/* Floating texts */}
         {floatingTextStyles.map((style, index) => (
           <div
             key={index}
@@ -349,6 +370,7 @@ const App = () => {
         </footer>
       </div>
 
+      {/* Access Modal */}
       <div className="modal" style={{ display: accessGranted ? "none" : "block" }} id="accessModal">
         <div className="modal-content">
           <h2>Access Required</h2>
@@ -374,6 +396,7 @@ const App = () => {
         </div>
       </div>
 
+      {/* Completion Modal */}
       {showCompletion && (
         <div className="modal" id="completionModal">
           <div className="modal-content">
@@ -388,8 +411,17 @@ const App = () => {
 };
 
 const floatingTexts = [
-  "GMONAD", "GOCTO", "GCHOG", "GCHOGSTAR", "GMOO", "GDAKS",
-  "G10K", "GBLOCK", "GMEOW", "GMOPO", "GCANZ",
+  "GMONAD",
+  "GOCTO",
+  "GCHOG",
+  "GCHOGSTAR",
+  "GMOO",
+  "GDAKS",
+  "G10K",
+  "GBLOCK",
+  "GMEOW",
+  "GMOPO",
+  "GCANZ",
 ];
 
 export default App;
