@@ -1,5 +1,4 @@
 const axios = require('axios');
-require('dotenv').config(); // For local testing with .env
 
 const collectionMetadata = {
     "0x6341c537a6fc563029d8e8caa87da37f227358f4": {
@@ -318,20 +317,30 @@ const collectionMetadata = {
 
 
 };
-
 exports.handler = async (event) => {
     const { contractAddress, pageIndex, pageSize } = event.queryStringParameters || {};
 
-    // Validate parameters
-    if (!contractAddress || !pageIndex || !pageSize || isNaN(pageIndex) || isNaN(pageSize)) {
+    // Validate required parameters
+    if (!contractAddress || !pageIndex || !pageSize) {
         return {
             statusCode: 400,
-            body: JSON.stringify({ error: 'Missing or invalid parameters' }),
+            body: JSON.stringify({ error: 'Missing required parameters: contractAddress, pageIndex, pageSize' }),
+        };
+    }
+
+    const pageIndexNum = parseInt(pageIndex, 10);
+    const pageSizeNum = parseInt(pageSize, 10);
+
+    // Ensure pageIndex and pageSize are positive integers
+    if (isNaN(pageIndexNum) || isNaN(pageSizeNum) || pageIndexNum < 1 || pageSizeNum < 1) {
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ error: 'Invalid parameters: pageIndex and pageSize must be positive integers' }),
         };
     }
 
     try {
-        const url = `https://api.blockvision.org/v2/monad/collection/holders?contractAddress=${encodeURIComponent(contractAddress)}&pageIndex=${pageIndex}&pageSize=${pageSize}`;
+        const url = `https://api.blockvision.org/v2/monad/collection/holders?contractAddress=${encodeURIComponent(contractAddress)}&pageIndex=${pageIndexNum}&pageSize=${pageSizeNum}`;
         const response = await axios.get(url, {
             headers: {
                 accept: 'application/json',
@@ -339,9 +348,13 @@ exports.handler = async (event) => {
             },
         });
 
+        // Validate API response
         if (response.data.code !== 0 || !response.data.result || !Array.isArray(response.data.result.data)) {
             console.error('API response invalid:', response.data);
-            throw new Error(response.data.message || 'Invalid response format');
+            return {
+                statusCode: 400,
+                body: JSON.stringify({ error: response.data.message || 'Invalid API response format' }),
+            };
         }
 
         const holders = response.data.result.data;
@@ -353,15 +366,38 @@ exports.handler = async (event) => {
         };
     } catch (error) {
         console.error('Error fetching holders:', error);
+
+        // Handle specific error cases
         if (error.response) {
+            const status = error.response.status;
+            if (status === 429) {
+                return {
+                    statusCode: 429,
+                    body: JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+                };
+            } else if (status === 404) {
+                return {
+                    statusCode: 404,
+                    body: JSON.stringify({ error: 'Collection not found or invalid contract address.' }),
+                };
+            } else {
+                return {
+                    statusCode: status || 500,
+                    body: JSON.stringify({ error: error.response.data?.message || 'API error' }),
+                };
+            }
+        } else if (error.request) {
+            // Network error
             return {
-                statusCode: error.response.status || 500,
-                body: JSON.stringify({ error: error.response.data.message || 'API error' }),
+                statusCode: 503,
+                body: JSON.stringify({ error: 'Network error. Please check your connection and try again.' }),
+            };
+        } else {
+            // Other errors
+            return {
+                statusCode: 500,
+                body: JSON.stringify({ error: 'Internal server error. Please try again later.' }),
             };
         }
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ error: 'Failed to fetch holders' }),
-        };
     }
 };

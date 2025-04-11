@@ -6,7 +6,7 @@ const App = () => {
   const [contractAddress, setContractAddress] = useState("");
   const [minNFTs, setMinNFTs] = useState("");
   const [holderCount, setHolderCount] = useState("");
-  const [result, setResult] = useState([]);
+  const [result, setResult] = useState([]); // Store all fetched holders
   const [collectionMetadata, setCollectionMetadata] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [accessGranted, setAccessGranted] = useState(false);
@@ -16,6 +16,8 @@ const App = () => {
   const [showCompletion, setShowCompletion] = useState(false);
   const [fileFormat, setFileFormat] = useState("pdf");
   const [fetchError, setFetchError] = useState("");
+  const [currentPageIndex, setCurrentPageIndex] = useState(1); // Track current page for pagination
+  const [hasMorePages, setHasMorePages] = useState(true); // Track if more data is available
 
   // Request notification permission
   useEffect(() => {
@@ -50,6 +52,8 @@ const App = () => {
         left: `${Math.random() * maxX}px`,
         top: `${Math.random() * maxY}px`,
         transition: "all 5s linear",
+        WebkitTransition: "all 5s linear", // Safari compatibility
+        MozTransition: "all 5s linear",    // Firefox compatibility
       }));
       setFloatingTextStyles(newStyles);
     };
@@ -76,38 +80,60 @@ const App = () => {
     const url = `/api/holders?contractAddress=${encodeURIComponent(contractAddress)}&pageIndex=${pageIndex}&pageSize=${pageSize}`;
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
     }
     return response.json();
   };
 
-  // Fetch all holders with pagination
-  const fetchAllNFTHolders = async (contractAddress, pageSize = 10) => {
-    let allHolders = [];
-    let metadata = null;
-    let pageIndex = 1;
+  // Fetch all holders with pagination and retry logic
+  const fetchAllNFTHolders = async (startOver = false) => {
+    if (!hasMorePages && !fetchError) return; // Stop if no more pages and no error to retry
+
+    setIsLoading(true);
+    setFetchError(""); // Clear previous errors if starting over
+
+    const pageSize = 10;
     const batchSize = 5;
+    let allHolders = startOver ? [] : [...result]; // Preserve existing holders unless starting over
+    let metadata = collectionMetadata;
+    let pageIndex = startOver ? 1 : currentPageIndex;
 
     try {
-      while (true) {
-        const fetchPromises = [];
-        for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
-          fetchPromises.push(fetchNFTHolders(contractAddress, pageIndex + i, pageSize));
-        }
-        const batchResults = await Promise.all(fetchPromises);
-        let hasMorePages = false;
-        for (const result of batchResults) {
-          if (!metadata) metadata = result.metadata;
-          allHolders.push(...result.holders);
-          if (result.total && allHolders.length < result.total) hasMorePages = true;
-          else if (result.holders.length === pageSize) hasMorePages = true;
-        }
-        pageIndex += batchSize;
-        if (!hasMorePages || fetchPromises.length < batchSize) break;
+      const fetchPromises = [];
+      for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
+        fetchPromises.push(fetchNFTHolders(contractAddress, pageIndex + i, pageSize));
       }
-      return { holders: allHolders, metadata };
+      const batchResults = await Promise.all(fetchPromises);
+
+      let hasMore = false;
+      for (const result of batchResults) {
+        if (!metadata) metadata = result.metadata;
+        allHolders.push(...result.holders);
+        if (result.holders.length === pageSize) hasMore = true; // More pages if full batch received
+      }
+
+      const minNFTsValue = parseInt(minNFTs, 10) - 1 || 0;
+      const filteredHolders = filterHolders(allHolders, minNFTsValue);
+
+      setResult(filteredHolders);
+      setHolderCount(`Number of Holders holding at least ${minNFTs || 1} NFT(s): ${filteredHolders.length}`);
+      setCollectionMetadata(metadata);
+      setCurrentPageIndex(pageIndex + batchSize);
+      setHasMorePages(hasMore);
+
+      if (!hasMore) {
+        setShowCompletion(true);
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("Fetching Completed", {
+            body: "All NFT holders have been successfully fetched!",
+          });
+        }
+      }
     } catch (error) {
-      throw new Error(`Failed to fetch holders: ${error.message}`);
+      setFetchError(error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -116,7 +142,7 @@ const App = () => {
     return holders.filter((holder) => Number(holder.amount) > minNFTs);
   };
 
-  // Form submission
+  // Form submission (start fetching from scratch)
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (!/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) {
@@ -127,45 +153,23 @@ const App = () => {
       return;
     }
 
-    let minNFTsValue = 0;
-    if (minNFTs) {
-      minNFTsValue = parseInt(minNFTs, 10) - 1;
-      if (isNaN(minNFTsValue) || minNFTsValue < 0) {
-        alert("Please enter a valid minimum NFT count (positive integer).");
-        return;
-      }
+    let minNFTsValue = parseInt(minNFTs, 10) - 1;
+    if (minNFTs && (isNaN(minNFTsValue) || minNFTsValue < 0)) {
+      alert("Please enter a valid minimum NFT count (positive integer).");
+      return;
     }
 
-    setIsLoading(true);
-    setFetchError("");
     setHolderCount("");
     setResult([]);
     setCollectionMetadata(null);
+    setCurrentPageIndex(1);
+    setHasMorePages(true);
+    fetchAllNFTHolders(true); // Start over
+  };
 
-    try {
-      const { holders, metadata } = await fetchAllNFTHolders(contractAddress);
-      if (holders.length > 0) {
-        const filteredHolders = filterHolders(holders, minNFTsValue);
-        setHolderCount(`Number of Holders holding at least ${minNFTs || 1} NFT(s): ${filteredHolders.length}`);
-        setResult(filteredHolders);
-        setCollectionMetadata(metadata);
-        if ("Notification" in window && Notification.permission === "granted") {
-          new Notification("Fetching Completed", {
-            body: "NFT holders have been successfully fetched!",
-          });
-        }
-        setShowCompletion(true);
-      } else {
-        setHolderCount("Number of holders: 0");
-        setResult([]);
-        setCollectionMetadata(null);
-        setShowCompletion(true);
-      }
-    } catch (error) {
-      setFetchError(error.message);
-    } finally {
-      setIsLoading(false);
-    }
+  // Retry fetching from current page
+  const handleRetry = () => {
+    fetchAllNFTHolders(false); // Continue from current page
   };
 
   // Reset form
@@ -176,6 +180,8 @@ const App = () => {
     setResult([]);
     setCollectionMetadata(null);
     setFetchError("");
+    setCurrentPageIndex(1);
+    setHasMorePages(true);
   };
 
   // Download results
@@ -225,6 +231,12 @@ const App = () => {
           {fetchError && (
             <div className="error-message">
               {fetchError}
+              <br />
+              {result.length > 0 && (
+                <button onClick={handleRetry} disabled={isLoading}>
+                  Retry Fetching More
+                </button>
+              )}
             </div>
           )}
           <form onSubmit={handleFormSubmit}>
@@ -248,7 +260,7 @@ const App = () => {
               placeholder="Enter minimum NFT count"
             />
             <button type="submit" disabled={isLoading}>
-              {isLoading ? "Loading..." : fetchError ? "Try Again" : "Find Holders"}
+              {isLoading ? "Loading..." : fetchError && result.length === 0 ? "Try Again" : "Find Holders"}
             </button>
             <button type="button" onClick={handleReset} disabled={isLoading}>
               Reset
@@ -343,6 +355,13 @@ const App = () => {
               Download
             </button>
           </div>
+
+          {/* Load More button if there are more pages and no error */}
+          {result.length > 0 && hasMorePages && !fetchError && (
+            <button onClick={() => fetchAllNFTHolders(false)} disabled={isLoading}>
+              {isLoading ? "Loading..." : "Load More Holders"}
+            </button>
+          )}
         </div>
 
         {/* Floating texts */}
