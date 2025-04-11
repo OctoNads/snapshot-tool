@@ -326,7 +326,7 @@ exports.handler = async (event) => {
   }
 
   const pageIndexNum = parseInt(pageIndex, 10);
-  const pageSizeNum = parseInt(pageSize, 20);
+  const pageSizeNum = parseInt(pageSize, 15);
 
   if (isNaN(pageIndexNum) || isNaN(pageSizeNum) || pageIndexNum < 1 || pageSizeNum < 1) {
     return {
