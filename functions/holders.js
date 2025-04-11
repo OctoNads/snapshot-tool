@@ -326,7 +326,7 @@ exports.handler = async (event) => {
   }
 
   const pageIndexNum = parseInt(pageIndex, 10);
-  const pageSizeNum = parseInt(pageSize, 15);
+  const pageSizeNum = parseInt(pageSize, 10);
 
   if (isNaN(pageIndexNum) || isNaN(pageSizeNum) || pageIndexNum < 1 || pageSizeNum < 1) {
     return {
@@ -343,7 +343,7 @@ exports.handler = async (event) => {
         accept: 'application/json',
         'x-api-key': process.env.API_KEY,
       },
-      timeout: 20000,
+      timeout: 10000,
     });
 
     console.log(`Response code: ${response.data.code}, Result: ${JSON.stringify(response.data.result)}`);
