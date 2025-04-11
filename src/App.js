@@ -15,16 +15,16 @@ const App = () => {
   const [floatingTextStyles, setFloatingTextStyles] = useState([]);
   const [showCompletion, setShowCompletion] = useState(false);
   const [fileFormat, setFileFormat] = useState("pdf");
-  const [fetchError, setFetchError] = useState(false);
+  const [fetchError, setFetchError] = useState("");
 
   // Request notification permission
   useEffect(() => {
-    if (Notification.permission !== "granted" && Notification.permission !== "denied") {
-      Notification.requestPermission();
+    if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+      Notification.requestPermission().catch((err) => console.error("Notification permission error:", err));
     }
   }, []);
 
-  // Floating texts animation
+  // Floating text animation
   useEffect(() => {
     const floatingTexts = [
       "GMONAD",
@@ -53,13 +53,15 @@ const App = () => {
       }));
       setFloatingTextStyles(newStyles);
     };
+
     moveFloatingTexts();
     const interval = setInterval(moveFloatingTexts, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  // Access control
-  const handleAccessSubmit = () => {
+  // Handle access submission
+  const handleAccessSubmit = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     const input = accessInput.trim().toUpperCase();
     if (input === "GOCTO") {
       setAccessGranted(true);
@@ -73,8 +75,10 @@ const App = () => {
   const fetchNFTHolders = async (contractAddress, pageIndex = 1, pageSize = 10) => {
     const url = `/api/holders?contractAddress=${encodeURIComponent(contractAddress)}&pageIndex=${pageIndex}&pageSize=${pageSize}`;
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-    return await response.json();
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    return response.json();
   };
 
   // Fetch all holders with pagination
@@ -83,25 +87,28 @@ const App = () => {
     let metadata = null;
     let pageIndex = 1;
     const batchSize = 5;
-  
-    while (true) {
-      const fetchPromises = [];
-      for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
-        fetchPromises.push(fetchNFTHolders(contractAddress, pageIndex + i, pageSize));
+
+    try {
+      while (true) {
+        const fetchPromises = [];
+        for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
+          fetchPromises.push(fetchNFTHolders(contractAddress, pageIndex + i, pageSize));
+        }
+        const batchResults = await Promise.all(fetchPromises);
+        let hasMorePages = false;
+        for (const result of batchResults) {
+          if (!metadata) metadata = result.metadata;
+          allHolders.push(...result.holders);
+          if (result.total && allHolders.length < result.total) hasMorePages = true;
+          else if (result.holders.length === pageSize) hasMorePages = true;
+        }
+        pageIndex += batchSize;
+        if (!hasMorePages || fetchPromises.length < batchSize) break;
       }
-      const batchResults = await Promise.all(fetchPromises);
-      let hasMorePages = false;
-      for (const result of batchResults) {
-        if (!metadata) metadata = result.metadata;
-        allHolders.push(...result.holders);
-        // Check if there are more pages (assuming API provides a 'total' field)
-        if (result.total && allHolders.length < result.total) hasMorePages = true;
-        else if (result.holders.length === pageSize) hasMorePages = true;
-      }
-      pageIndex += batchSize;
-      if (!hasMorePages || fetchPromises.length < batchSize) break;
+      return { holders: allHolders, metadata };
+    } catch (error) {
+      throw new Error(`Failed to fetch holders: ${error.message}`);
     }
-    return { holders: allHolders, metadata };
   };
 
   // Filter holders by minimum NFT count
@@ -116,8 +123,7 @@ const App = () => {
       setHolderCount("");
       setResult([]);
       setCollectionMetadata(null);
-      setResult(["Invalid contract address format."]);
-      setFetchError(true);
+      setFetchError("Invalid contract address format.");
       return;
     }
 
@@ -131,7 +137,7 @@ const App = () => {
     }
 
     setIsLoading(true);
-    setFetchError(false);
+    setFetchError("");
     setHolderCount("");
     setResult([]);
     setCollectionMetadata(null);
@@ -140,10 +146,10 @@ const App = () => {
       const { holders, metadata } = await fetchAllNFTHolders(contractAddress);
       if (holders.length > 0) {
         const filteredHolders = filterHolders(holders, minNFTsValue);
-        setHolderCount(`Number of Holders holding at least ${minNFTs || 1} amount of NFTs: ${filteredHolders.length}`);
+        setHolderCount(`Number of Holders holding at least ${minNFTs || 1} NFT(s): ${filteredHolders.length}`);
         setResult(filteredHolders);
         setCollectionMetadata(metadata);
-        if (Notification.permission === "granted") {
+        if ("Notification" in window && Notification.permission === "granted") {
           new Notification("Fetching Completed", {
             body: "NFT holders have been successfully fetched!",
           });
@@ -156,15 +162,7 @@ const App = () => {
         setShowCompletion(true);
       }
     } catch (error) {
-      setHolderCount("");
-      setResult([`Error: ${error.message}`]);
-      setCollectionMetadata(null);
-      setFetchError(true);
-      if (Notification.permission === "granted") {
-        new Notification("Fetching Failed", {
-          body: "Failed to fetch NFT holders. Please try again.",
-        });
-      }
+      setFetchError(error.message);
     } finally {
       setIsLoading(false);
     }
@@ -177,7 +175,7 @@ const App = () => {
     setHolderCount("");
     setResult([]);
     setCollectionMetadata(null);
-    setFetchError(false);
+    setFetchError("");
   };
 
   // Download results
@@ -210,12 +208,11 @@ const App = () => {
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", position: "relative" }}>
-      {/* Blurred content */}
-      <div className={accessGranted ? "" : "blur"}>
+      <div className={accessGranted ? "" : "blur-content"}>
         <header className="sticky-header">
           <img
             src="https://amethyst-worthy-gayal-734.mypinata.cloud/ipfs/bafkreiguhll5qwfac6x36v362nv2mhgl7so45dd262zpulwq7c4tfwbedq"
-            alt="Logo"
+            alt="OctoNads Logo"
             className="header-logo"
           />
           <div className="header-title">
@@ -225,6 +222,11 @@ const App = () => {
           <div className="header-spacer"></div>
         </header>
         <div className="container">
+          {fetchError && (
+            <div className="error-message">
+              {fetchError}
+            </div>
+          )}
           <form onSubmit={handleFormSubmit}>
             <label htmlFor="contractAddress">NFT Contract Address:</label>
             <input
@@ -234,6 +236,7 @@ const App = () => {
               onChange={(e) => setContractAddress(e.target.value)}
               placeholder="e.g., 0x..."
               required
+              aria-required="true"
             />
             <label htmlFor="minNFTs">Minimum NFTs (optional, default is 1):</label>
             <input
@@ -245,9 +248,9 @@ const App = () => {
               placeholder="Enter minimum NFT count"
             />
             <button type="submit" disabled={isLoading}>
-              {isLoading ? "Loading..." : fetchError ? "Try Again" : "Find Holders Address"}
+              {isLoading ? "Loading..." : fetchError ? "Try Again" : "Find Holders"}
             </button>
-            <button type="button" onClick={handleReset}>
+            <button type="button" onClick={handleReset} disabled={isLoading}>
               Reset
             </button>
           </form>
@@ -262,20 +265,22 @@ const App = () => {
                     {collectionMetadata.verified && (
                       <img
                         src="https://amethyst-worthy-gayal-734.mypinata.cloud/ipfs/bafkreid7pkljli36nzivwmixmdul5pa44qhpcpxgrxukmkawuc3j2shb3e"
-                        alt="Verified"
+                        alt="Verified Badge"
                         className="verified-badge"
                       />
                     )}
                   </h3>
                   <p>Supply: {collectionMetadata.supply}</p>
-                  <a
-                    href={collectionMetadata.marketplaceLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="marketplace-link"
-                  >
-                    View on Marketplace
-                  </a>
+                  {collectionMetadata.marketplaceLink && (
+                    <a
+                      href={collectionMetadata.marketplaceLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="marketplace-link"
+                    >
+                      View on Marketplace
+                    </a>
+                  )}
                 </div>
                 <div className="image-and-logos">
                   <img
@@ -286,12 +291,12 @@ const App = () => {
                   <div className="social-logos">
                     {collectionMetadata.twitter && (
                       <a href={collectionMetadata.twitter} target="_blank" rel="noopener noreferrer">
-                        <i className="fab fa-twitter social-logo"></i>
+                        <i className="fab fa-twitter social-logo" aria-label="Twitter"></i>
                       </a>
                     )}
                     {collectionMetadata.discord && (
                       <a href={collectionMetadata.discord} target="_blank" rel="noopener noreferrer">
-                        <i className="fab fa-discord social-logo"></i>
+                        <i className="fab fa-discord social-logo" aria-label="Discord"></i>
                       </a>
                     )}
                   </div>
@@ -300,18 +305,18 @@ const App = () => {
             </div>
           )}
           {!collectionMetadata && holderCount && (
-            <p style={{ marginTop: "20px" }}>
-              Collection metadata not available for this contract address. Contact the OctoNads Team to get Upload
+            <p className="metadata-unavailable">
+              Collection metadata not available for this contract address. Contact the OctoNads Team to get it uploaded.
             </p>
           )}
 
-          <div id="holderCount" style={{ marginTop: "20px" }}>{holderCount}</div>
-          <div id="result" style={{ marginTop: "10px" }}>
+          {holderCount && <div id="holderCount">{holderCount}</div>}
+          <div id="result">
             {result.length > 0 ? (
               Array.isArray(result) && result[0].ownerAddress ? (
-                <ul style={{ listStyleType: "none", padding: 0 }}>
+                <ul>
                   {result.map((holder, index) => (
-                    <li key={index} style={{ marginBottom: "5px" }}>
+                    <li key={index}>
                       {holder.ownerAddress} - Amount: {holder.amount}
                     </li>
                   ))}
@@ -320,11 +325,11 @@ const App = () => {
                 <p>{result[0]}</p>
               )
             ) : (
-              <p>Holders address will found here ...</p>
+              <p>Holders will appear here...</p>
             )}
           </div>
 
-          <div id="downloadOptions" style={{ marginTop: "20px" }}>
+          <div id="downloadOptions">
             <label htmlFor="fileFormat">Download as:</label>
             <select
               id="fileFormat"
@@ -334,30 +339,20 @@ const App = () => {
               <option value="pdf">PDF</option>
               <option value="xml">XML</option>
             </select>
-            <button onClick={handleDownload}>Download</button>
+            <button onClick={handleDownload} disabled={!result.length || isLoading}>
+              Download
+            </button>
           </div>
         </div>
 
-        {/* Render floating texts */}
+        {/* Floating texts */}
         {floatingTextStyles.map((style, index) => (
           <div
             key={index}
             className="floating-text"
-            style={style}
+            style={{ ...style, MozTransition: style.transition, WebkitTransition: style.transition }}
           >
-            {[
-              "GMONAD",
-              "GOCTO",
-              "GCHOG",
-              "GCHOGSTAR",
-              "GMOO",
-              "GDAKS",
-              "G10K",
-              "GBLOCK",
-              "GMEOW",
-              "GMOPO",
-              "GCANZ",
-            ][index]}
+            {floatingTexts[index]}
           </div>
         ))}
 
@@ -366,49 +361,67 @@ const App = () => {
           <div className="powered-by">Powered by OctoNads</div>
           <div className="social-icons">
             <a href="https://x.com/OctoNads" target="_blank" rel="noopener noreferrer">
-              <i className="fab fa-twitter social-logoo"></i>
+              <i className="fab fa-twitter social-logo" aria-label="Twitter"></i>
             </a>
             <a href="https://discord.com/invite/octonads" target="_blank" rel="noopener noreferrer">
-              <i className="fab fa-discord social-logoo"></i>
+              <i className="fab fa-discord social-logo" aria-label="Discord"></i>
             </a>
           </div>
         </footer>
       </div>
 
       {/* Access Modal */}
-      {!accessGranted && (
-        <div id="accessModal" className="modal" style={{ display: "block" }}>
-          <div className="modal-content">
-            <h2>Access Required</h2>
-            <p>Please type "GOCTO" to access the snapshot tool.</p>
+      <div className="modal" style={{ display: accessGranted ? "none" : "block" }} id="accessModal">
+        <div className="modal-content">
+          <h2>Access Required</h2>
+          <p>Please type "GOCTO" to access the snapshot tool.</p>
+          <form onSubmit={handleAccessSubmit}>
             <input
               type="text"
               id="accessInput"
               value={accessInput}
               onChange={(e) => setAccessInput(e.target.value)}
               placeholder="Type GOCTO"
-              onKeyPress={(e) => e.key === "Enter" && handleAccessSubmit()}
+              autoFocus
+              required
+              aria-required="true"
             />
-            <button onClick={handleAccessSubmit}>Submit</button>
-            {accessError && (
-              <p id="accessError" style={{ color: "red" }}>
-                Incorrect input. Please try again.
-              </p>
-            )}
-          </div>
+            <button type="submit">Submit</button>
+          </form>
+          {accessError && (
+            <p id="accessError" className="error-message">
+              Incorrect input. Please try again.
+            </p>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Completion Modal */}
       {showCompletion && (
-        <div id="completionModal" style={{ display: "block" }}>
-          <h2>Fetching Completed</h2>
-          <p>NFT holders have been successfully fetched!</p>
-          <button onClick={() => setShowCompletion(false)}>OK</button>
+        <div className="modal" id="completionModal">
+          <div className="modal-content">
+            <h2>Fetching Completed</h2>
+            <p>NFT holders have been successfully fetched!</p>
+            <button onClick={() => setShowCompletion(false)}>OK</button>
+          </div>
         </div>
       )}
     </div>
   );
 };
+
+const floatingTexts = [
+  "GMONAD",
+  "GOCTO",
+  "GCHOG",
+  "GCHOGSTAR",
+  "GMOO",
+  "GDAKS",
+  "G10K",
+  "GBLOCK",
+  "GMEOW",
+  "GMOPO",
+  "GCANZ",
+];
 
 export default App;
