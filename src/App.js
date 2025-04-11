@@ -87,7 +87,7 @@ const App = () => {
     let allHolders = [];
     let metadata = null;
     let pageIndex = 1;
-    const batchSize = 5;
+    const batchSize = 10;
 
     try {
       while (true) {
@@ -146,7 +146,7 @@ const App = () => {
 
     setTimeout(() => {
       setShowInfoPopup(false);
-    }, 5000);
+    }, 8000);
 
     try {
       const { holders, metadata } = await fetchAllNFTHolders(contractAddress);
