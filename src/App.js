@@ -82,36 +82,40 @@ const App = () => {
     return response.json();
   };
 
-  // Fetch all NFT holders with pagination
   const fetchAllNFTHolders = async (contractAddress, pageSize = 10) => {
     let allHolders = [];
     let metadata = null;
     let pageIndex = 1;
     const batchSize = 5;
-
-    try {
-      while (true) {
-        const fetchPromises = [];
-        for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
-          fetchPromises.push(fetchNFTHolders(contractAddress, pageIndex + i, pageSize));
-        }
-        const batchResults = await Promise.all(fetchPromises);
-        let hasMorePages = false;
-        for (const result of batchResults) {
-          if (!metadata) metadata = result.metadata;
-          allHolders.push(...result.holders);
-          if (result.total && allHolders.length < result.total) hasMorePages = true;
-          else if (result.holders.length === pageSize) hasMorePages = true;
-        }
-        pageIndex += batchSize;
-        if (!hasMorePages || fetchPromises.length < batchSize) break;
+  
+    while (true) {
+      const fetchPromises = [];
+      for (let i = 0; i < batchSize && pageIndex + i <= 1000; i++) {
+        const currentPage = pageIndex + i;
+        fetchPromises.push(
+          fetchNFTHolders(contractAddress, currentPage, pageSize).catch((error) => {
+            console.error(`Failed to fetch page ${currentPage}: ${error.message}`);
+            return { holders: [], metadata: null, total: 0 };
+          })
+        );
       }
-      return { holders: allHolders, metadata };
-    } catch (error) {
-      throw new Error(`Failed to fetch holders: ${error.message}`);
+      const batchResults = await Promise.all(fetchPromises);
+      let hasMorePages = false;
+      for (const result of batchResults) {
+        if (!metadata && result.metadata) metadata = result.metadata;
+        allHolders.push(...result.holders);
+        if (result.total && allHolders.length < result.total) hasMorePages = true;
+        else if (result.holders.length === pageSize) hasMorePages = true;
+      }
+      pageIndex += batchSize;
+      console.log(`Fetched ${allHolders.length} holders so far`);
+      if (!hasMorePages || fetchPromises.length < batchSize) break;
     }
+    if (allHolders.length === 0) throw new Error("No holders fetched due to server errors");
+    return { holders: allHolders, metadata };
   };
 
+  
   // Filter holders by minimum NFT count
   const filterHolders = (holders, minNFTs) => {
     return holders.filter((holder) => Number(holder.amount) > minNFTs);

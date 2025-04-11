@@ -341,15 +341,18 @@ exports.handler = async (event) => {
 
   try {
     const url = `https://api.blockvision.org/v2/monad/collection/holders?contractAddress=${encodeURIComponent(contractAddress)}&pageIndex=${pageIndexNum}&pageSize=${pageSizeNum}`;
+    console.log(`Fetching: ${url}`);
     const response = await axios.get(url, {
       headers: {
         accept: 'application/json',
         'x-api-key': process.env.API_KEY,
       },
-      timeout: 13000, // Set a shorter timeout to avoid hitting Netlify's limit
+      timeout: 10000,
     });
 
+    console.log(`Response code: ${response.data.code}, Result: ${JSON.stringify(response.data.result)}`);
     if (response.data.code !== 0 || !response.data.result || !Array.isArray(response.data.result.data)) {
+      console.error('Invalid API response:', response.data);
       return {
         statusCode: 400,
         body: JSON.stringify({ error: response.data.message || 'Invalid API response' }),
@@ -364,7 +367,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({ holders, metadata, total: response.data.result.total || holders.length }),
     };
   } catch (error) {
-    console.error('Error fetching holders:', error.message);
+    console.error(`Error fetching holders for ${contractAddress}, page ${pageIndex}:`, error.message, error.response?.data);
     return {
       statusCode: error.response?.status || 500,
       body: JSON.stringify({ error: error.message || 'Failed to fetch holders' }),
