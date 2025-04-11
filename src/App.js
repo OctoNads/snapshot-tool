@@ -196,7 +196,6 @@ const App = () => {
       const lineHeight = 10; // Height per line
       const pageHeight = doc.internal.pageSize.height; // Typically 297mm or ~842 points for A4
       const margin = 10; // Top and bottom margin
-      const maxLinesPerPage = Math.floor((pageHeight - 2 * margin) / lineHeight); // Number of lines that fit on a page
       let y = margin; // Starting y-position
   
       addresses.forEach((addr, index) => {
