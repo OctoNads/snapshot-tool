@@ -346,7 +346,7 @@ exports.handler = async (event) => {
         accept: 'application/json',
         'x-api-key': process.env.API_KEY,
       },
-      timeout: 8000, // Set a shorter timeout to avoid hitting Netlify's limit
+      timeout: 13000, // Set a shorter timeout to avoid hitting Netlify's limit
     });
 
     if (response.data.code !== 0 || !response.data.result || !Array.isArray(response.data.result.data)) {
