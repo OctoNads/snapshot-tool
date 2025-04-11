@@ -343,7 +343,7 @@ exports.handler = async (event) => {
         accept: 'application/json',
         'x-api-key': process.env.API_KEY,
       },
-      timeout: 15000,
+      timeout: 11000,
     });
 
     console.log(`Response code: ${response.data.code}, Result: ${JSON.stringify(response.data.result)}`);
