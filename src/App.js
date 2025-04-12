@@ -83,11 +83,11 @@ const App = () => {
   };
 
   // Fetch all NFT holders with pagination
-  const fetchAllNFTHolders = async (contractAddress, pageSize = 10) => {
+  const fetchAllNFTHolders = async (contractAddress, pageSize = 50) => {
     let allHolders = [];
     let metadata = null;
     let pageIndex = 1;
-    const batchSize = 5;
+    const batchSize = 1;
 
     try {
       while (true) {
